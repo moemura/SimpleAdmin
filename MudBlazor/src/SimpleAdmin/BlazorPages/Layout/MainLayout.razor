@@ -1,0 +1,81 @@
+﻿@inherits LayoutComponentBase
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Identity
+@using SimpleAdmin.Models.Entities
+@inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject HttpClient HttpClient
+@inject ILogger<MainLayout> Logger
+@inject NavigationManager NavigationManager
+
+<AuthorizeView>
+    <Authorized Context="auth">
+        <MudThemeProvider />
+        <MudPopoverProvider />
+        <MudDialogProvider />
+        <MudSnackbarProvider />
+        <MudLayout>
+            <MudAppBar Elevation="4" Position="Position.Fixed">
+                <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((e) => DrawerToggle())" />
+                <MudText Typo="Typo.h5" Class="ml-3">Application</MudText>
+                <MudSpacer />
+            </MudAppBar>
+            <MudDrawerContainer Style="margin-top:64px;">
+                <MudDrawer Variant="DrawerVariant.Responsive" @bind-Open="_drawerOpen" Elevation="1" Width="250px">
+                    <MudNavMenu>
+                        <MudNavLink Href="/"><MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.PieChart" /> Dashboards</MudNavLink>
+                        <MudExpansionPanels>
+                            <MudExpansionPanel Text="Users And Roles">
+                                <MudNavLink Href="/admin/users"><MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.Group" /> Users</MudNavLink>
+                                <MudNavLink Href="/admin/roles"><MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.Security" /> Roles</MudNavLink>
+                            </MudExpansionPanel>
+                        </MudExpansionPanels>
+                        <MudNavLink Href="/admin/categories"><MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.List" /> Categories</MudNavLink>
+                        <MudNavLink Href="/admin/settings"><MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.Settings" /> Settings</MudNavLink>
+                        <MudNavLink Href="swagger"><MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.Shield" /> Swagger</MudNavLink>
+                        <MudNavLink Href="/admin/account"><MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.Person" /> Account</MudNavLink>
+                        <MudNavLink Href="/admin/logout"><MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.Logout" /> Logout</MudNavLink>
+                    </MudNavMenu>
+                </MudDrawer>
+                <MudMainContent Class="site-layout-background" Style="padding:16px; min-height:calc(100vh - 64px);">
+                    @Body
+                </MudMainContent>
+            </MudDrawerContainer>
+        </MudLayout>
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    private bool _drawerOpen = true;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        if (authState.User.Identity?.IsAuthenticated == false)
+        {
+            NavigationManager.NavigateTo("/admin/login", true);
+        }
+    }
+
+    private void NavigateToLogin()
+    {
+        JS.InvokeVoidAsync("window.location.assign", "/admin/login");
+    }
+
+    private void HandleLogout()
+    {
+        try
+        {
+            JS.InvokeVoidAsync("window.location.assign", "/admin/logout");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error during logout");
+        }
+    }
+
+    private void DrawerToggle()
+    {
+        _drawerOpen = !_drawerOpen;
+    }
+}

@@ -1,0 +1,215 @@
+﻿@page "/admin/account"
+@using Microsoft.AspNetCore.Components.Authorization
+@using SimpleAdmin.Services.Auth
+@using SimpleAdmin.Models.DTOs
+@inject IAccountService AccountService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IMessageService Message
+@inject ILogger<AccountPage> Logger
+
+@* Removed AntDesign components to leave only MudBlazor implementation *@
+<PageTitle>Account Management</PageTitle>
+
+<div style="padding:24px;">
+    <MudPaper Class="pa-4">
+        <MudStack Direction="Direction.Row" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.Person" />
+            <MudText Typo="Typo.h5">Account Management</MudText>
+        </MudStack>
+
+        <MudTabs>
+            <MudTabPanel Text="Personal information">
+                <div style="max-width:600px; margin-top:16px;">
+                    @if (_loadingProfile)
+                    {
+                        <MudProgressCircular Indeterminate="true" />
+                    }
+                    else
+                    {
+                        <EditForm Model="_profileModel" OnValidSubmit="HandleUpdateProfile">
+                            <MudTextField T="string" Label="Email" @bind-Value="_profileModel.Email" Disabled="true" />
+                            <MudTextField T="string" Label="Full Name" Required="true" @bind-Value="_profileModel.FullName" />
+                            <MudTextField T="string" Label="Phone Number" @bind-Value="_profileModel.PhoneNumber" />
+                            <MudTextField T="string" Label="Address" @bind-Value="_profileModel.Address" Lines="3" />
+
+                            <div class="mt-2">
+                                <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="MudBlazor.ButtonType.Submit" Disabled="_updating">
+                                    <MudIcon Icon="@Icons.Material.Filled.Save" />
+                                    <span class="ml-2">Update information</span>
+                                </MudButton>
+                            </div>
+                        </EditForm>
+                    }
+                </div>
+            </MudTabPanel>
+
+            <MudTabPanel Text="Change password">
+                <div style="max-width:600px; margin-top:16px;">
+                    <EditForm Model="_passwordModel" OnValidSubmit="HandleChangePassword">
+                        <MudTextField T="string" Label="Current Password" InputType="InputType.Password" Required="true" @bind-Value="_passwordModel.CurrentPassword" />
+                        <MudTextField T="string" Label="New Password" InputType="InputType.Password" Required="true" @bind-Value="_passwordModel.NewPassword" />
+                        <MudTextField T="string" Label="Confirm Password" InputType="InputType.Password" Required="true" @bind-Value="_passwordModel.ConfirmPassword" />
+
+                        <div class="mt-2">
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" Disabled="_changingPassword">
+                                <MudIcon Icon="@Icons.Material.Filled.Lock" />
+                                <span class="ml-2">Change password</span>
+                            </MudButton>
+                        </div>
+                    </EditForm>
+                </div>
+            </MudTabPanel>
+        </MudTabs>
+    </MudPaper>
+</div>
+
+@code {
+    private UpdateProfileDto _profileModel = new();
+    private ChangePasswordModel _passwordModel = new();
+    private bool _loadingProfile = false;
+    private bool _updating = false;
+    private bool _changingPassword = false;
+    private string _currentUserId = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUserProfile();
+    }
+
+    private async Task LoadUserProfile()
+    {
+        try
+        {
+            _loadingProfile = true;
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            _currentUserId = authState.User.FindFirst("sub")?.Value ?? 
+                           authState.User.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")?.Value ?? 
+                           string.Empty;
+
+            if (string.IsNullOrEmpty(_currentUserId))
+            {
+                Message.Error("Unable to identify user");
+                return;
+            }
+
+            var result = await AccountService.GetProfileAsync(_currentUserId);
+            if (result.Success && result.User != null)
+            {
+                _profileModel = new UpdateProfileDto
+                {
+                    Email = result.User.Email,
+                    FullName = result.User.FullName,
+                    PhoneNumber = result.User.PhoneNumber,
+                    Address = result.User.Address
+                };
+            }
+            else
+            {
+                Message.Error(result.Message ?? "Unable to load user information");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading user profile");
+            Message.Error("An error occurred while loading user information.");
+        }
+        finally
+        {
+            _loadingProfile = false;
+        }
+    }
+
+    private async Task HandleUpdateProfile()
+    {
+        try
+        {
+            _updating = true;
+            
+            if (string.IsNullOrWhiteSpace(_profileModel.FullName))
+            {
+                Message.Warning("Please enter your full name");
+                return;
+            }
+
+            var result = await AccountService.UpdateProfileAsync(_currentUserId, _profileModel);
+            if (result.Success)
+            {
+                Message.Success("Information updated successfully");
+            }
+            else
+            {
+                Message.Error(result.Message ?? "Update information failed");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error updating profile");
+            Message.Error("An error occurred while updating the information.");
+        }
+        finally
+        {
+            _updating = false;
+        }
+    }
+
+    private async Task HandleChangePassword()
+    {
+        try
+        {
+            _changingPassword = true;
+
+            if (string.IsNullOrWhiteSpace(_passwordModel.CurrentPassword) ||
+                string.IsNullOrWhiteSpace(_passwordModel.NewPassword) ||
+                string.IsNullOrWhiteSpace(_passwordModel.ConfirmPassword))
+            {
+                Message.Warning("Please fill in all information");
+                return;
+            }
+
+            if (_passwordModel.NewPassword != _passwordModel.ConfirmPassword)
+            {
+                Message.Warning("Confirmation password does not match");
+                return;
+            }
+
+            if (_passwordModel.NewPassword.Length < 6)
+            {
+                Message.Warning("New password must be at least 6 characters");
+                return;
+            }
+
+            var changePasswordDto = new ChangePasswordDto
+            {
+                CurrentPassword = _passwordModel.CurrentPassword,
+                NewPassword = _passwordModel.NewPassword
+            };
+
+            var result = await AccountService.ChangePasswordAsync(_currentUserId, changePasswordDto);
+            if (result.Success)
+            {
+                Message.Success("Password changed successfully");
+                _passwordModel = new ChangePasswordModel(); // Reset form
+            }
+            else
+            {
+                Message.Error(result.Message ?? "Password change failed");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error changing password");
+            Message.Error("An error occurred while changing password.");
+        }
+        finally
+        {
+            _changingPassword = false;
+        }
+    }
+
+    private class ChangePasswordModel
+    {
+        public string CurrentPassword { get; set; } = string.Empty;
+        public string NewPassword { get; set; } = string.Empty;
+        public string ConfirmPassword { get; set; } = string.Empty;
+    }
+}

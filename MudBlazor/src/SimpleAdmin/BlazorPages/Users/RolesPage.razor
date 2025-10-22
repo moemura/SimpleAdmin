@@ -1,0 +1,365 @@
+@page "/admin/roles"
+@using SimpleAdmin.Models
+@using SimpleAdmin.Models.DTOs
+@using SimpleAdmin.Services.Auth
+@inject IRoleService roleService
+@inject IAccountService accountService
+@inject IMessageService Message
+@inject NavigationManager NavigationManager
+
+<PageTitle>Roles Management</PageTitle>
+
+<MudPaper Class="pa-4">
+    <MudStack Row Spacing="2" AlignItems="AlignItems.Center">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="ShowCreateModal">Add new</MudButton>
+        <MudTextField T="string" Placeholder="Search roles..." Style="width:200px" @bind-Value="_searchText" Immediate="true" OnBlur="@(async () => await OnSearch(_searchText))" />
+    </MudStack>
+
+    <MudTable Items="_data" Loading="_loading" Hover="true">
+        <HeaderContent>
+            <MudTh>Name</MudTh>
+            <MudTh>Normalized Name</MudTh>
+            <MudTh>Action</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.Name</MudTd>
+            <MudTd>@context.NormalizedName</MudTd>
+            <MudTd>
+                <MudFab Size="Size.Small" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit" OnClick="() => ShowEditModal(context)" />
+                <MudFab Size="Size.Small" Color="Color.Primary" StartIcon="@Icons.Material.Filled.List" OnClick="() => ShowUserRoleModal(context)" />
+                <MudFab Size="Size.Small" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="() => ShowAssignRoleModal(context)" />
+                <MudFab Size="Size.Small" Color="Color.Default" StartIcon="@Icons.Material.Filled.PersonRemove" OnClick="() => ShowRemoveRoleModal(context)" />
+                <MudFab Size="Size.Small" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="() => ShowDeleteModal(context)" />
+            </MudTd>
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[] { 5, 10, 20, 50 }" />
+        </PagerContent>
+    </MudTable>
+
+    <!-- Dialogs -->
+    <MudDialog @bind-Visible="_createModalVisible">
+        <TitleContent>Create a role</TitleContent>
+        <DialogContent>
+            <EditForm Model="_newRole">
+                <MudTextField T="string" Label="Name" @bind-Value="_newRole.Name" />
+            </EditForm>
+        </DialogContent>
+        <DialogActions>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="OnCreateOk">Create</MudButton>
+            <MudButton Variant="Variant.Filled" OnClick="OnCreateCancel">Cancel</MudButton>
+        </DialogActions>
+    </MudDialog>
+
+    <MudDialog @bind-Visible="_editModalVisible">
+        <TitleContent>Edit role</TitleContent>
+        <DialogContent>
+            <EditForm Model="_editRole">
+                <MudTextField T="string" Label="Name" @bind-Value="_editRole.Name" />
+            </EditForm>
+        </DialogContent>
+        <DialogActions>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="OnEditOk">Save</MudButton>
+            <MudButton Variant="Variant.Filled" OnClick="OnEditCancel">Cancel</MudButton>
+        </DialogActions>
+    </MudDialog>
+
+    <MudDialog @bind-Visible="_deleteModalVisible">
+        <TitleContent>Delete role</TitleContent>
+        <DialogContent>
+            <EditForm Model="_editRole">
+                <MudTextField T="string" Label="Name" @bind-Value="_editRole.Name" />
+            </EditForm>
+        </DialogContent>
+        <DialogActions>
+            <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="OnDeleteOk">Delete</MudButton>
+            <MudButton Variant="Variant.Filled" OnClick="OnDeleteCancel">Cancel</MudButton>
+        </DialogActions>
+    </MudDialog>
+
+    <MudDialog @bind-Visible="_userRoleModalVisible">
+        <TitleContent>Users with role</TitleContent>
+        <DialogContent>
+            <MudTextField T="string" Label="Name" @bind-Value="_editRole.Name" Disabled="true" />
+            <MudTable Items="_dataUsers" Hover="true">
+                <HeaderContent>
+                    <MudTh>Full Name</MudTh>
+                    <MudTh>Email</MudTh>
+                    <MudTh>Phone</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.FullName</MudTd>
+                    <MudTd>@context.Email</MudTd>
+                    <MudTd>@context.PhoneNumber</MudTd>
+                </RowTemplate>
+            </MudTable>
+        </DialogContent>
+        <DialogActions>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="OnUserRoleOk">OK</MudButton>
+        </DialogActions>
+    </MudDialog>
+
+    <MudDialog @bind-Visible="_assignRoleModalVisible">
+        <TitleContent>Assign role</TitleContent>
+        <DialogContent>
+            <MudTextField T="string" Label="Name" @bind-Value="_editRole.Name" Disabled="true" />
+            <MudTable Items="_dataUsers" Hover="true" MultiSelection="true" @bind-SelectedItems="_selectedRows">
+                <HeaderContent>
+                    <MudTh>Full Name</MudTh>
+                    <MudTh>Email</MudTh>
+                    <MudTh>Phone</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.FullName</MudTd>
+                    <MudTd>@context.Email</MudTd>
+                    <MudTd>@context.PhoneNumber</MudTd>
+                </RowTemplate>
+            </MudTable>
+        </DialogContent>
+        <DialogActions>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="OnAssignRoleOk">Assign</MudButton>
+            <MudButton Variant="Variant.Filled" OnClick="OnAssignRoleCancel">Cancel</MudButton>
+        </DialogActions>
+    </MudDialog>
+
+    <MudDialog @bind-Visible="_removeRoleModalVisible">
+        <TitleContent>Remove role</TitleContent>
+        <DialogContent>
+            <MudTextField T="string" Label="Name" @bind-Value="_editRole.Name" Disabled="true" />
+            <MudTable Items="_dataUsers" Hover="true" MultiSelection="true" @bind-SelectedItems="_selectedRows">
+                <HeaderContent>
+                    <MudTh>Full Name</MudTh>
+                    <MudTh>Email</MudTh>
+                    <MudTh>Phone</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.FullName</MudTd>
+                    <MudTd>@context.Email</MudTd>
+                    <MudTd>@context.PhoneNumber</MudTd>
+                </RowTemplate>
+            </MudTable>
+        </DialogContent>
+        <DialogActions>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="OnRemoveRoleOk">Remove</MudButton>
+            <MudButton Variant="Variant.Filled" OnClick="OnRemoveRoleCancel">Cancel</MudButton>
+        </DialogActions>
+    </MudDialog>
+</MudPaper>
+
+@code {
+    private IEnumerable<RoleDto> _data = Array.Empty<RoleDto>();
+    private List<UserDto> _dataUsers = new();
+    private HashSet<UserDto> _selectedRows = new();
+    private RoleDto _newRole = new();
+    private RoleDto _editRole = new();
+    private bool _loading = true;
+    private string _searchText = "";
+    private bool _createModalVisible = false;
+    private bool _editModalVisible = false;
+    private bool _deleteModalVisible = false;
+    private bool _userRoleModalVisible = false;
+    private bool _assignRoleModalVisible = false;
+    private bool _removeRoleModalVisible = false;
+    private PaginatedList<RoleDto> _paginationData = new();
+
+    private int pageSize = 5;
+    private int pageIndex = 1;
+    private int totalItems = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _loading = true;
+
+        await Task.Delay(100);
+        try
+        {
+            _paginationData = await roleService.GetPaginationAsync(pageIndex, pageSize);
+            _data = _paginationData.Data;
+            totalItems = _paginationData.ItemCount;
+        }
+        catch (Exception ex)
+        {
+            Message.Error($"Error loading data: {ex.Message}");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OnSearch(string value)
+    {
+        _searchText = value;
+        pageIndex = 1;
+        await LoadData();
+    }
+
+    private async Task OnPageSizeChange(int newSize)
+    {
+        pageSize = newSize;
+        pageIndex = 1;
+        await LoadData();
+    }
+
+    private void ShowCreateModal()
+    {
+        _newRole = new RoleDto();
+        _createModalVisible = true;
+    }
+
+    private void ShowEditModal(RoleDto role)
+    {
+        _editRole = new RoleDto
+        {
+            Id = role.Id,
+            Name = role.Name,
+            NormalizedName = role.NormalizedName,
+        };
+        _editModalVisible = true;
+    }
+
+    private void ShowDeleteModal(RoleDto role)
+    {
+        _editRole = new RoleDto
+        {
+            Id = role.Id,
+            Name = role.Name,
+            NormalizedName = role.NormalizedName,
+        };
+        _deleteModalVisible = true;
+    }
+
+    private async Task ShowUserRoleModal(RoleDto role)
+    {
+        _editRole = role;
+        _dataUsers = (await roleService.GetUsersInRoleAsync(role.Name)).ToList();
+        _userRoleModalVisible = true;
+    }
+
+    private async Task ShowAssignRoleModal(RoleDto role)
+    {
+        _editRole = role;
+        var usersInRole = await roleService.GetUsersInRoleAsync(role.Name);
+        _dataUsers = (await accountService.GetAllAsync()).ToList();
+        _dataUsers = _dataUsers.Where(x => usersInRole.All(y => y.Id != x.Id)).ToList();
+        _assignRoleModalVisible = true;
+    }
+
+    private async Task ShowRemoveRoleModal(RoleDto role)
+    {
+        _editRole = role;
+        var usersInRole = await roleService.GetUsersInRoleAsync(role.Name);
+        _dataUsers = (await accountService.GetAllAsync()).ToList();
+        _dataUsers = _dataUsers.Where(x => usersInRole.Any(y => y.Id == x.Id)).ToList();
+        _removeRoleModalVisible = true;
+    }
+
+    private async Task OnCreateOk()
+    {
+        try
+        {
+            await roleService.CreateAsync(_newRole);
+            Message.Success("Role added successfully!");
+            _createModalVisible = false;
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            Message.Error($"Error adding role: {ex.Message}");
+        }
+    }
+
+    private void OnCreateCancel() => _createModalVisible = false;
+
+    private async Task OnEditOk()
+    {
+        try
+        {
+            await roleService.UpdateAsync(_editRole);
+            Message.Success("Role updated successfully!");
+            _editModalVisible = false;
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            Message.Error($"Error updating role: {ex.Message}");
+        }
+    }
+
+    private void OnEditCancel() => _editModalVisible = false;
+
+    private async Task OnDeleteOk()
+    {
+        try
+        {
+            await roleService.DeleteAsync(_editRole.Id);
+            Message.Success("Role deleted successfully!");
+            _deleteModalVisible = false;
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            Message.Error($"Error deleting role: {ex.Message}");
+        }
+    }
+
+    private void OnDeleteCancel() => _deleteModalVisible = false;
+
+    private async Task OnUserRoleOk()
+    {
+        try
+        {
+            _userRoleModalVisible = false;
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+
+        }
+    }
+
+    private async Task OnAssignRoleOk()
+    {
+        try
+        {
+            if (_selectedRows.Count() > 0)
+            {
+                await roleService.AssignRoleAsync(_editRole, _selectedRows);
+                Message.Success("Role assigned successfully!");
+            }
+            _assignRoleModalVisible = false;
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            Message.Error($"Error assigning role: {ex.Message}");
+        }
+    }
+
+    private void OnAssignRoleCancel() => _assignRoleModalVisible = false;
+
+    private async Task OnRemoveRoleOk()
+    {
+        try
+        {
+            if (_selectedRows.Count() > 0)
+            {
+                await roleService.RemoveRoleAsync(_editRole, _selectedRows);
+                Message.Success("Role removed successfully!");
+            }
+            _removeRoleModalVisible = false;
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            Message.Error($"Error removing role: {ex.Message}");
+        }
+    }
+
+    private void OnRemoveRoleCancel() => _removeRoleModalVisible = false;
+}
