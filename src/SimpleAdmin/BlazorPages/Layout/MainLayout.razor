@@ -1,0 +1,187 @@
+﻿@inherits LayoutComponentBase
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Identity
+@using SimpleAdmin.Models.Entities
+@inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject HttpClient HttpClient
+@inject ILogger<MainLayout> Logger
+
+<AuthorizeView>
+    <Authorized>
+        <Layout>
+            <Header Class="header">
+                <div class="header-left">
+                    @* <img class="logo" src="logo.png" /> *@
+                    <Avatar Size="AvatarSize.Large" Src="logo.png" />
+                    <h2 class="app-name">Admin Panel</h2>
+                </div>
+                <div class="header-right">
+                    <Dropdown>
+                        <ChildContent>
+                            <Button Type="@ButtonType.Link" Class="user-dropdown-btn">
+                                <Avatar Size="AvatarSize.Small" Icon="@IconType.Outline.User" />
+                                <span class="username">@context.User.Identity?.Name</span>
+                                <Icon Type="@IconType.Outline.Down" />
+                            </Button>
+                        </ChildContent>
+                        <Overlay>
+                            <Menu>
+                                <MenuItem Key="profile" RouterLink="/admin/account">
+                                    <Icon Type="@IconType.Outline.User" />
+                                    <span>Account</span>
+                                </MenuItem>
+                                <MenuDivider />
+                                <MenuItem Key="logout" OnClick="HandleLogout">
+                                    <Icon Type="@IconType.Outline.Logout" />
+                                    <span>Logout</span>
+                                </MenuItem>
+                            </Menu>
+                        </Overlay>
+                    </Dropdown>
+                </div>
+            </Header>
+            <Layout>
+                <Sider Collapsible Theme="SiderTheme.Light" Width="250" Breakpoint="BreakpointType.Lg">
+                    <Menu Theme="MenuTheme.Light" DefaultSelectedKeys=@(new[] { "1" }) Mode="MenuMode.Inline">
+                        <MenuItem Key="1" RouterLink="/">
+                            <Icon Type="@IconType.Outline.BarChart" />
+                            <span>Dashboards</span>
+                        </MenuItem>
+                        <SubMenu TitleTemplate="@userAndRolesFragment">
+                            <MenuItem Key="100" RouterLink="/admin/users">
+                                <Icon Type="@IconType.Outline.Contacts"></Icon>
+                                <span>Users</span>
+                            </MenuItem>
+                            <MenuItem Key="101" RouterLink="/admin/roles">
+                                <Icon Type="@IconType.Outline.PicCenter"></Icon>
+                                <span>Roles</span>
+                            </MenuItem>
+                        </SubMenu>
+                        <MenuItem Key="5" RouterLink="/admin/categories">
+                            <Icon Type="@IconType.Outline.OrderedList" />
+                            <span>Categories</span>
+                        </MenuItem>
+                        <MenuItem Key="10" RouterLink="/admin/settings">
+                            <Icon Type="@IconType.Outline.Setting" />
+                            <span>Settings</span>
+                        </MenuItem>
+                        <MenuItem Key="11" RouterLink="swagger">
+                            <Icon Type="@IconType.Outline.Safety" />
+                            <span>Swagger</span>
+                        </MenuItem>
+                    </Menu>
+                </Sider>
+                <Layout>
+                    <Content Class="site-layout-background" Style="padding: 16px; margin: 0; min-height: 100vh;">
+                        @Body
+                    </Content>
+                </Layout>
+            </Layout>
+        </Layout>
+    </Authorized>
+</AuthorizeView>
+<style>
+    .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0 24px;
+        background: linear-gradient(90deg, #667db6 0%, #0082c8 25%, #0082c8 75%, #667db6 100%);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        height: 64px;
+    }
+
+    .header-left {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+    }
+
+    .header-right {
+        display: flex;
+        align-items: center;
+    }
+
+    .logo {
+        width: 48px;
+        height: 48px;
+        margin: 4px 0;
+    }
+
+    .app-name {
+        color: white;
+        font-size: 20px;
+        font-weight: 600;
+        margin: 0;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    }
+
+    .user-dropdown-btn {
+        color: white !important;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 16px;
+        border-radius: 6px;
+        transition: all 0.3s ease;
+    }
+
+        .user-dropdown-btn:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+    .username {
+        font-weight: 500;
+    }
+
+    .site-layout-background {
+        background: #fff;
+    }
+
+    .login-message {
+        padding: 24px;
+        text-align: center;
+        color: #666;
+    }
+</style>
+<script>
+    window.redirectTo = function(url) {
+    window.location.assign(url);
+    };
+</script>
+
+@code {
+    RenderFragment userAndRolesFragment =
+    @<Template>
+        <Icon Type="@IconType.Outline.Setting" />
+        Users And Roles
+    </Template>;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        if (authState.User.Identity?.IsAuthenticated == false)
+        {
+            NavigateToLogin();
+        }
+    }
+
+    private void NavigateToLogin()
+    {
+        JS.InvokeVoidAsync("window.location.assign", "/admin/login");
+    }
+
+    private async Task HandleLogout()
+    {
+        try
+        {
+            JS.InvokeVoidAsync("window.location.assign", "/admin/logout");
+            // Điều hướng về trang đăng nhập
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error during logout");
+        }
+    }
+}
