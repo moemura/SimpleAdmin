@@ -1,0 +1,226 @@
+﻿@page "/admin/account"
+@using Microsoft.AspNetCore.Components.Authorization
+@using SimpleAdmin.Services.Auth
+@using SimpleAdmin.Models.DTOs
+@inject IAccountService AccountService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IMessageService Message
+@inject ILogger<AccountPage> Logger
+
+<PageTitle>Account Management</PageTitle>
+
+<div style="padding: 24px;">
+    <Title Level="2">
+        <Icon Type="@IconType.Outline.User" />
+        Account Management
+    </Title>
+
+    <Tabs DefaultActiveKey="1" TabPosition="TabPosition.Top">
+        <TabPane Key="1" Tab="Personal information">
+            <div style="max-width: 600px; margin-top: 24px;">
+                <Spin Spinning="_loadingProfile">
+                    <Form Model="_profileModel" OnFinish="HandleUpdateProfile" LabelCol="new ColLayoutParam { Span = 6 }" WrapperCol="new ColLayoutParam { Span = 18 }">
+                        <FormItem Label="Email">
+                            <Input @bind-Value="_profileModel.Email" Disabled="true" />
+                        </FormItem>
+                        
+                        <FormItem Label="Full Name" Required>
+                            <Input @bind-Value="_profileModel.FullName" Placeholder="Input Full name" />
+                        </FormItem>
+                        
+                        <FormItem Label="Phone Number">
+                            <Input @bind-Value="_profileModel.PhoneNumber" Placeholder="Input Phone Number" />
+                        </FormItem>
+                        
+                        <FormItem Label="Address">
+                            <TextArea @bind-Value="_profileModel.Address" Placeholder="Input Address" Rows="3" />
+                        </FormItem>
+                        
+                        <FormItem WrapperCol="new ColLayoutParam { Offset = 6, Span = 18 }">
+                            <Button Type="@ButtonType.Primary" HtmlType="submit" Loading="_updating">
+                                <Icon Type="@IconType.Outline.Save" />
+                                Update information
+                            </Button>
+                        </FormItem>
+                    </Form>
+                </Spin>
+            </div>
+        </TabPane>
+
+        <TabPane Key="2" Tab="Change password">
+            <div style="max-width: 600px; margin-top: 24px;">
+                <Form Model="_passwordModel" OnFinish="HandleChangePassword" LabelCol="new ColLayoutParam { Span = 6 }" WrapperCol="new ColLayoutParam { Span = 18 }">
+                    <FormItem Label="Current Password" Required>
+                        <InputPassword @bind-Value="_passwordModel.CurrentPassword" Placeholder="Input Current Password" />
+                    </FormItem>
+                    
+                    <FormItem Label="New Password" Required>
+                        <InputPassword @bind-Value="_passwordModel.NewPassword" Placeholder="Input New Password" />
+                    </FormItem>
+                    
+                    <FormItem Label="Confirm Password" Required>
+                        <InputPassword @bind-Value="_passwordModel.ConfirmPassword" Placeholder="Input Confirm Password" />
+                    </FormItem>
+                    
+                    <FormItem WrapperCol="new ColLayoutParam { Offset = 6, Span = 18 }">
+                        <Button Type="@ButtonType.Primary" HtmlType="submit" Loading="_changingPassword">
+                            <Icon Type="@IconType.Outline.Lock" />
+                            Change password
+                        </Button>
+                    </FormItem>
+                </Form>
+            </div>
+        </TabPane>
+    </Tabs>
+</div>
+
+@code {
+    private UpdateProfileDto _profileModel = new();
+    private ChangePasswordModel _passwordModel = new();
+    private bool _loadingProfile = false;
+    private bool _updating = false;
+    private bool _changingPassword = false;
+    private string _currentUserId = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUserProfile();
+    }
+
+    private async Task LoadUserProfile()
+    {
+        try
+        {
+            _loadingProfile = true;
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            _currentUserId = authState.User.FindFirst("sub")?.Value ?? 
+                           authState.User.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")?.Value ?? 
+                           string.Empty;
+
+            if (string.IsNullOrEmpty(_currentUserId))
+            {
+                Message.Error("Unable to identify user");
+                return;
+            }
+
+            var result = await AccountService.GetProfileAsync(_currentUserId);
+            if (result.Success && result.User != null)
+            {
+                _profileModel = new UpdateProfileDto
+                {
+                    Email = result.User.Email,
+                    FullName = result.User.FullName,
+                    PhoneNumber = result.User.PhoneNumber,
+                    Address = result.User.Address
+                };
+            }
+            else
+            {
+                Message.Error(result.Message ?? "Unable to load user information");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading user profile");
+            Message.Error("An error occurred while loading user information.");
+        }
+        finally
+        {
+            _loadingProfile = false;
+        }
+    }
+
+    private async Task HandleUpdateProfile()
+    {
+        try
+        {
+            _updating = true;
+            
+            if (string.IsNullOrWhiteSpace(_profileModel.FullName))
+            {
+                Message.Warning("Please enter your full name");
+                return;
+            }
+
+            var result = await AccountService.UpdateProfileAsync(_currentUserId, _profileModel);
+            if (result.Success)
+            {
+                Message.Success("Information updated successfully");
+            }
+            else
+            {
+                Message.Error(result.Message ?? "Update information failed");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error updating profile");
+            Message.Error("An error occurred while updating the information.");
+        }
+        finally
+        {
+            _updating = false;
+        }
+    }
+
+    private async Task HandleChangePassword()
+    {
+        try
+        {
+            _changingPassword = true;
+
+            if (string.IsNullOrWhiteSpace(_passwordModel.CurrentPassword) ||
+                string.IsNullOrWhiteSpace(_passwordModel.NewPassword) ||
+                string.IsNullOrWhiteSpace(_passwordModel.ConfirmPassword))
+            {
+                Message.Warning("Please fill in all information");
+                return;
+            }
+
+            if (_passwordModel.NewPassword != _passwordModel.ConfirmPassword)
+            {
+                Message.Warning("Confirmation password does not match");
+                return;
+            }
+
+            if (_passwordModel.NewPassword.Length < 6)
+            {
+                Message.Warning("New password must be at least 6 characters");
+                return;
+            }
+
+            var changePasswordDto = new ChangePasswordDto
+            {
+                CurrentPassword = _passwordModel.CurrentPassword,
+                NewPassword = _passwordModel.NewPassword
+            };
+
+            var result = await AccountService.ChangePasswordAsync(_currentUserId, changePasswordDto);
+            if (result.Success)
+            {
+                Message.Success("Password changed successfully");
+                _passwordModel = new ChangePasswordModel(); // Reset form
+            }
+            else
+            {
+                Message.Error(result.Message ?? "Password change failed");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error changing password");
+            Message.Error("An error occurred while changing password.");
+        }
+        finally
+        {
+            _changingPassword = false;
+        }
+    }
+
+    private class ChangePasswordModel
+    {
+        public string CurrentPassword { get; set; } = string.Empty;
+        public string NewPassword { get; set; } = string.Empty;
+        public string ConfirmPassword { get; set; } = string.Empty;
+    }
+}

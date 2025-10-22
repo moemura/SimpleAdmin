@@ -1,0 +1,290 @@
+@page "/admin/categories"
+@using AntDesign.TableModels
+@using SimpleAdmin.Models
+@using SimpleAdmin.Models.DTOs
+@using SimpleAdmin.Services.Categories
+@using SimpleAdmin.Services.Files
+@inject ICategoryService categoryService
+@inject IFileService fileService
+@inject MessageService MessageService
+
+<PageTitle>Category Management</PageTitle>
+<Breadcrumb>
+    <BreadcrumbItem Href="">
+        <Icon Type="@IconType.Outline.Home" />
+    </BreadcrumbItem>
+    <BreadcrumbItem Href="">
+        <Icon Type="@IconType.Outline.Appstore" />
+        <span>Category Management</span>
+    </BreadcrumbItem>
+</Breadcrumb>
+
+<br />
+
+<Space>
+    <SpaceItem>
+        <Button Type="@ButtonType.Primary" OnClick="() => ShowCreateModal()">
+            <Icon Type="plus" Theme="IconThemeType.Outline" />
+            Add new
+        </Button>
+    </SpaceItem>
+    <SpaceItem>
+        <Input @bind-Value="@_searchText"
+               Placeholder="Search categories..."
+               Style="width: 200px"
+               OnChange="@(async (string value) => await OnSearch(value))" />
+    </SpaceItem>
+    <SpaceItem>
+        <Select TItem="int"
+                TItemValue="int"
+                Style="width: 120px"
+                @bind-Value="@pageSize"
+                OnChange="@(async (int value) => await OnPageSizeChange(value))">
+            <SelectOptions>
+                <SelectOption TItem="int" TItemValue="int" Value="5" Label="5 / page" />
+                <SelectOption TItem="int" TItemValue="int" Value="10" Label="10 / page" />
+                <SelectOption TItem="int" TItemValue="int" Value="20" Label="20 / page" />
+                <SelectOption TItem="int" TItemValue="int" Value="50" Label="50 / page" />
+            </SelectOptions>
+        </Select>
+    </SpaceItem>
+</Space>
+
+<p />
+
+<Table @ref=_table
+       TItem="CategoryDto"
+       DataSource="@_data"
+       Total="@totalItems"
+       PageSize="@pageSize"
+       PageIndex="@pageIndex"
+       OnChange="@OnTableChange"
+       Loading="_loading">
+    <PropertyColumn TItem="CategoryDto" TProp="string" Width="80px" >
+        <Avatar Src="@(fileService.GetFileUrl(context.Image, "categories"))" />
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Name" Title="Category name" />
+    <PropertyColumn Property="c => c.Description" Title="Description" />
+    <ActionColumn Title="Operation">
+        <Space>
+            <SpaceItem>
+                <Button Type="@ButtonType.Primary" OnClick="() => ShowEditModal(context)">
+                    <Icon Type="edit" />
+                </Button>
+            </SpaceItem>
+            <SpaceItem>
+                <Popconfirm Title="Confirm deletion?"
+                            OkText="OK"
+                            CancelText="Cancel"
+                            OnConfirm="() => OnDelete(context.Id)">
+                    <Button Danger>
+                        <Icon Type="delete" />
+                    </Button>
+                </Popconfirm>
+            </SpaceItem>
+        </Space>
+    </ActionColumn>
+</Table>
+
+<Modal Title="@("Create a category")"
+       Visible="@_createModalVisible"
+       OnOk="@OnCreateOk"
+       OnCancel="@OnCreateCancel"
+       Width="600">
+    <Form Model="@_newCategory" LabelCol="new ColLayoutParam { Span = 6 }" WrapperCol="new ColLayoutParam { Span = 18 }">
+        <FormItem Label="Category name">
+            <Input @bind-Value="@_newCategory.Name" />
+        </FormItem>
+        <FormItem Label="Description">
+            <TextArea @bind-Value="@_newCategory.Description" />
+        </FormItem>
+        <FormItem Label="Image">
+            <InputFile OnChange="@OnCreateImageChange" Accept=".jpg,.jpeg,.png" />
+            @if (!string.IsNullOrEmpty(_newCategory.Image))
+            {
+                <div style="margin-top: 10px;">
+                    <Image Src="@fileService.GetFileUrl(_newCategory.Image, "categories")" Style="width: 200px; height: 200px; object-fit: cover;" />
+                </div>
+            }
+        </FormItem>
+    </Form>
+</Modal>
+
+<Modal Title="@("Edit category")"
+       Visible="@_editModalVisible"
+       OnOk="@OnEditOk"
+       OnCancel="@OnEditCancel"
+       Width="600">
+    <Form Model="@_editCategory" LabelCol="new ColLayoutParam { Span = 6 }" WrapperCol="new ColLayoutParam { Span = 18 }">
+        <FormItem Label="Category name">
+            <Input @bind-Value="@_editCategory.Name" />
+        </FormItem>
+        <FormItem Label="Description">
+            <TextArea @bind-Value="@_editCategory.Description" />
+        </FormItem>
+        <FormItem Label="Image">
+            <InputFile OnChange="@OnEditImageChange" Accept=".jpg,.jpeg,.png" />
+            @if (!string.IsNullOrEmpty(_editCategory.Image))
+            {
+                <div style="margin-top: 10px;">
+                    <Image Src="@fileService.GetFileUrl(_editCategory.Image, "categories")" Style="width: 200px; height: 200px; object-fit: cover;" />
+                </div>
+            }
+        </FormItem>
+    </Form>
+</Modal>
+
+@code {
+    private IEnumerable<CategoryDto> _data = [];
+    private ITable _table;
+    private CategoryDto _newCategory = new();
+    private CategoryDto _editCategory = new();
+    private bool _loading = true;
+    private string _searchText = "";
+    private bool _createModalVisible = false;
+    private bool _editModalVisible = false;
+    private PaginatedList<CategoryDto> _paginationData = new();
+    private IBrowserFile _createImageFile;
+    private IBrowserFile _editImageFile;
+
+    private int pageSize = 5;
+    private int pageIndex = 1;
+    private int totalItems = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _loading = true;
+
+        await Task.Delay(100);
+        try
+        {
+            _paginationData = await categoryService.GetPagination(pageIndex, pageSize);
+            _data = _paginationData.Data;
+            totalItems = _paginationData.ItemCount;
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"Error loading data: {ex.Message}");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OnSearch(string value)
+    {
+        _searchText = value;
+        pageIndex = 1;
+        await LoadData();
+    }
+
+    private async Task OnPageSizeChange(int newSize)
+    {
+        pageSize = newSize;
+        pageIndex = 1;
+        await LoadData();
+    }
+
+    private async Task OnTableChange(QueryModel<CategoryDto> queryModel)
+    {
+        pageIndex = queryModel.PageIndex;
+        pageSize = queryModel.PageSize;
+        await LoadData();
+    }
+
+    private void ShowCreateModal()
+    {
+        _newCategory = new CategoryDto();
+        _createModalVisible = true;
+    }
+
+    private void ShowEditModal(CategoryDto category)
+    {
+        _editCategory = new CategoryDto
+            {
+                Id = category.Id,
+                Name = category.Name,
+                Description = category.Description,
+                Image = category.Image
+            };
+        _editModalVisible = true;
+    }
+
+    private async Task OnCreateImageChange(InputFileChangeEventArgs e)
+    {
+        _createImageFile = e.File;
+        if (_createImageFile != null)
+        {
+            _newCategory.Image = await fileService.SaveFileAsync(_createImageFile, "categories");
+        }
+    }
+
+    private async Task OnEditImageChange(InputFileChangeEventArgs e)
+    {
+        _editImageFile = e.File;
+        if (_editImageFile != null)
+        {
+            _editCategory.Image = await fileService.SaveFileAsync(_editImageFile, "categories");
+        }
+    }
+
+    private async Task OnCreateOk()
+    {
+        try
+        {
+            await categoryService.Create(_newCategory);
+            MessageService.Success("Category added successfully!");
+            _createModalVisible = false;
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"Error adding category: {ex.Message}");
+        }
+    }
+
+    private void OnCreateCancel()
+    {
+        _createModalVisible = false;
+    }
+
+    private async Task OnEditOk()
+    {
+        try
+        {
+            await categoryService.Update(_editCategory);
+            MessageService.Success("Catalog updated successfully!");
+            _editModalVisible = false;
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"Error updating catalog: {ex.Message}");
+        }
+    }
+
+    private void OnEditCancel()
+    {
+        _editModalVisible = false;
+    }
+
+    private async Task OnDelete(string id)
+    {
+        try
+        {
+            await categoryService.Delete(id);
+            MessageService.Success("Category deleted successfully!");
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"Error while deleting category: {ex.Message}");
+        }
+    }
+} 
